@@ -1,0 +1,54 @@
+--Example of cursor made using Northwind Database(Microsoft). It runs several querys based on different filters. The actions are different depending on the condition.
+-- Declare variables, one per column in the select query
+DECLARE @customerID varchar(20), @companyName varchar(50), @contactName varchar(50), @city varchar(50), @country varchar(50), @orderDate date,
+@requiredDate date, @shippedDate date, @unitPrice money, @quantity int, @discount float, @orderID int
+
+--Declare cursor
+DECLARE cursor_northwind CURSOR FOR
+	-- Orders made in 1997
+	select t1.CustomerID, t1.CompanyName, t1.ContactName, t1.City, t1.Country, t2.OrderDate, t2.RequiredDate, t2.ShippedDate,t3.UnitPrice, t3.Quantity, t3.Discount,t2.OrderID
+	from Customers t1
+	inner join Orders t2
+	on t1.CustomerID = t2.CustomerID
+	inner join [Order Details] t3
+	on t2.OrderID = t3.OrderID
+	where year(t2.OrderDate) = 1997
+OPEN cursor_northwind
+FETCH cursor_northwind INTO @customerID , @companyName, @contactName, @city, @country, @orderDate,@requiredDate, @shippedDate, @unitPrice, @quantity, @discount, @orderid
+WHILE(@@FETCH_STATUS = 0)
+BEGIN
+	--Insert order into a temp table if the order wasn't delivered on time.
+	if (@shippedDate>@requiredDate)
+	begin
+		insert into Temp_OrdersOutOfTime (CompanyName, ContactName, City, Country, RequiredDate, ShippedDate) 
+		values(@companyName,@contactName,@city,@country,@requiredDate,@shippedDate)
+		
+		--Remove these kind of orders from both OrderDetails and Orders tables, following an order to avoid problems with the FK.
+		delete from [Order Details] where OrderID = @orderID
+		delete from Orders where OrderID = @orderID
+	--end
+
+	--Dislay total cost of orders that have been made in the UK
+	select sum(Quantity * UnitPrice) as 'TotalPrice'
+	from [Order Details] t1
+	inner join Orders t2
+	on t1.OrderID = t2.OrderID
+	inner join Customers t3
+	on t2.CustomerID = t3.CustomerID
+	where t3.CustomerID = @customerID and t3.Country = 'UK' 
+	
+	--Update the discount of those orders that have been made in Germany. Multiply per 2 the current discount.
+	update t3
+	set t3.Discount = t3.Discount * 2
+	from Customers t1
+	inner join orders t2
+	on t1.CustomerID = t2.CustomerID
+	inner join [Order Details] t3
+	on t2.OrderID = t3.OrderID
+	where t1.Country = 'Germany' and t3.OrderID = @orderID
+	
+
+	FETCH cursor_northwind INTO @customerID , @companyName, @contactName, @city, @country, @orderDate,@requiredDate, @shippedDate, @unitPrice, @quantity, @discount, @orderid
+END
+CLOSE cursor_northwind
+DEALLOCATE cursor_northwind
